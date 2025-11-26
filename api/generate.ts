@@ -1,106 +1,66 @@
-// api/generate.ts
+// api/generate.ts (Vercel Serverless - TS)
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-/**
- * Robust serverless endpoint for AI generation.
- * - Uses env GEMINI_API_KEY and optional GEMINI_API_URL (recommended).
- * - If Gemini call fails, returns a clear simulated fallback so UI works.
- */
+const GEMINI_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_URL = process.env.GEMINI_API_URL || 'https://us-central1-aiplatform.googleapis.com/v1beta2/projects/YOUR_PROJECT/locations/global/models/YOUR_MODEL:predict';
 
-const DEFAULT_GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/text-bison-001:generateText';
+if (!GEMINI_KEY) {
+  console.warn('GEMINI_API_KEY not set');
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+    if (req.method !== 'POST') return res.status(405).send({ error: 'Method not allowed' });
 
-    const { prompt } = (req.body && typeof req.body === 'object') ? req.body : { prompt: String(req.body || '') };
-    const textPrompt = (prompt && typeof prompt === 'string' && prompt.length > 0)
-      ? prompt
-      : 'Summarize and give 3 budgeting steps for this user based on spending.';
+    const { prompt, instructions } = req.body ?? {};
 
-    const GEMINI_KEY = process.env.GEMINI_API_KEY;
-    const GEMINI_URL = process.env.GEMINI_API_URL || DEFAULT_GEMINI_URL;
+    if (!prompt) return res.status(400).json({ error: 'Missing prompt' });
 
-    // If no key, immediately return fallback (keeps UI functional)
-    if (!GEMINI_KEY) {
-      console.warn('GEMINI_API_KEY not set — returning simulated advice.');
-      return res.status(200).json({
-        provider: 'simulated',
-        success: false,
-        advice: [
-          '• Reduce Food & Dining by 20% this month.',
-          '• Pause one streaming subscription for 3 months.',
-          '• Move ₹500/week to a separate savings bucket.'
-        ],
-        note: 'No GEMINI_API_KEY configured. Set GEMINI_API_KEY in Vercel project env to enable live AI.'
-      });
-    }
+    // Standard Bearer pattern - many Google endpoints accept Bearer token.
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      // Try Bearer first. If your Google API expects an API key in query param, change accordingly.
+      'Authorization': `Bearer ${GEMINI_KEY}`,
+    };
 
-    // Build request body suitable for the v1beta text-bison generateText
+    // If your service expects API key as header 'x-goog-api-key' (older patterns),
+    // uncomment the following and remove Bearer above:
+    // headers['x-goog-api-key'] = GEMINI_KEY;
+
+    /*
+      If the API endpoint strictly requires an OAuth2 access token (common),
+      you'll need to mint a token from a service account JSON. Example flow (node):
+        - Load service account json (don't commit to git; store in Vercel secret and mount in environment)
+        - Use google-auth-library to create a JWT and get access token, then use that bearer token.
+      If you need that code, tell me and I will provide the snippet.
+    */
+
+    // Build request body according to the model API. Keep payload minimal for categorization.
     const body = {
-      prompt: { text: textPrompt },
-      // optional config space — reduce tokens for faster, cheaper responses
-      // temperature: 0.2
-      // You can add more fields here depending on model endpoint requirements
+      // This will vary by exact endpoint; adapt to the API you intend to call.
+      input: {
+        // example format — adapt to your model's expected input
+        text: `${instructions ?? ''}\n\n${prompt}`
+      },
+      // optional: model config, temperature, max tokens, etc.
     };
 
-    // Two common auth patterns: API key as query param (key=...) or Bearer
-    // Google docs commonly show ?key=<API_KEY> for api-key access; some preview models require OAuth.
-    // We'll try query param first, and if that fails, we will also try sending Authorization header.
-    const tryUrls = [
-      // append key as query param
-      GEMINI_URL.includes('?') ? `${GEMINI_URL}&key=${GEMINI_KEY}` : `${GEMINI_URL}?key=${GEMINI_KEY}`,
-    ];
-
-    // Also include plain url (without query) but with Authorization header (some setups accept bearer)
-    // We'll do one fetch attempt; if it 401s or non-ok, we'll return fallback after logging.
-    let fetchOptions = {
+    const aiResp = await fetch(GEMINI_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' as string },
-      body: JSON.stringify(body)
-    };
+      headers,
+      body: JSON.stringify(body),
+    });
 
-    let lastError: any = null;
-    for (const url of tryUrls) {
-      try {
-        console.log('Calling Gemini endpoint:', url);
-        const r = await fetch(url, fetchOptions as any);
-        const text = await r.text();
-
-        if (!r.ok) {
-          console.warn('Gemini non-ok response', r.status, text);
-          lastError = { status: r.status, text };
-          continue; // try next url or fallback
-        }
-
-        // Try parse JSON
-        let parsed;
-        try { parsed = JSON.parse(text); } catch (parseErr) { parsed = text; }
-
-        return res.status(200).json({ provider: 'gemini', success: true, raw: parsed });
-      } catch (err) {
-        console.error('Fetch attempt error for url', url, err);
-        lastError = err;
-      }
+    if (!aiResp.ok) {
+      const txt = await aiResp.text();
+      console.error('AI provider error', aiResp.status, txt);
+      return res.status(aiResp.status).send({ error: 'AI provider error', detail: txt });
     }
 
-    // If we get here, all attempts failed. Log and return simulated fallback.
-    console.error('All Gemini attempts failed. Last error:', lastError);
-    return res.status(200).json({
-      provider: 'simulated',
-      success: false,
-      advice: [
-        '• Cut discretionary food deliveries by 20% this month.',
-        '• Delay non-essential shopping for 2 weeks.',
-        '• Automate ₹500/wk savings into a separate account.'
-      ],
-      debug: {
-        message: 'Gemini calls failed. Check GEMINI_API_KEY, GEMINI_API_URL, and Vercel function logs.',
-        lastError: String(lastError)
-      }
-    });
-  } catch (topErr) {
-    console.error('Unhandled error in /api/generate:', topErr);
-    return res.status(500).json({ error: 'Internal server error', details: String(topErr) });
+    const json = await aiResp.json();
+    return res.status(200).json({ result: json });
+  } catch (err: any) {
+    console.error('Server error /api/generate', err);
+    return res.status(500).json({ error: 'Internal server error', detail: err.message });
   }
 }
