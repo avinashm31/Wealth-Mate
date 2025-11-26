@@ -1,7 +1,7 @@
 {
-  "name": "wealthmate_1",
+  "name": "wealthmate-mini",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,10 +11,8 @@
   "dependencies": {
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "@google/genai": "^1.30.0",
-    "lucide-react": "^0.554.0",
-    "xlsx": "latest",
-    "google-auth-library": "^9.0.0"
+    "xlsx": "^0.20.3",
+    "lucide-react": "^0.554.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
