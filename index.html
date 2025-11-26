@@ -1,51 +1,65 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-    <title>WealthMate — Ultra Premium</title>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>WealthMate | Institutional Grade Finance</title>
 
-    <!-- Premium fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,400;0,600;0,800;1,400;1,700&display=swap" rel="stylesheet">
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&display=swap" rel="stylesheet">
 
-    <style>
-      :root{
-        --bg:#050505;
-        --glass: rgba(255,255,255,0.03);
-        --gold:#D4AF37;
-        --muted:#9aa0a6;
-        --panel:#0b0b0b;
-        --accent: #F3E5A9;
-        --rounded: 16px;
-      }
-      html,body,#root{height:100%}
-      body {
-        margin:0;
-        font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-        background: radial-gradient(1200px 600px at 10% 10%, rgba(212,175,55,0.03), transparent 6%),
-                    linear-gradient(180deg,#040404,#060606 40%, #0a0a0a 100%);
-        color: #e9e9e9;
-        -webkit-font-smoothing:antialiased;
-        -moz-osx-font-smoothing:grayscale;
-        overflow-y:auto;
-      }
-      a { color: inherit; }
-      button { font-family: inherit; }
-      /* Custom scrollbar */
-      ::-webkit-scrollbar { width: 10px; height:10px }
-      ::-webkit-scrollbar-track { background: #060606; }
-      ::-webkit-scrollbar-thumb { background: #222; border-radius: 8px; }
-      ::-webkit-scrollbar-thumb:hover { background: #444; }
+  <meta name="description" content="WealthMate — premium personal finance tracker with AI insights." />
+  <meta name="theme-color" content="#050505" />
 
-      /* micro animations */
-      .fade-in { animation: fadeIn 0.9s ease both; }
-      @keyframes fadeIn { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
-    </style>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
-  </body>
+  <style>
+    /* Minimal baseline styles for the app shell */
+    :root {
+      --bg: #050505;
+      --panel: rgba(255,255,255,0.02);
+      --muted: #888;
+      --gold: #FFD966;
+      --glass-border: rgba(212,175,55,0.08);
+      --text: #EAEAEA;
+      --accent: #D4AF37;
+    }
+
+    html,body,#root {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Global helper classes used by index.tsx components */
+    .app-container { min-height: 100%; display: flex; flex-direction: column; }
+    .center { display:flex; align-items:center; justify-content:center; }
+
+    /* Small responsive helper */
+    @media (max-width: 900px) {
+      .desktop-hide { display: none; }
+      .mobile-stack { flex-direction: column !important; }
+    }
+
+    /* Simple page-level scrollbars */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: #222; border-radius: 6px; }
+    ::-webkit-scrollbar-thumb:hover { background: #555; }
+
+    /* Prevent body overflow-x on some layouts */
+    body { overflow-x: hidden; }
+  </style>
+</head>
+<body>
+  <!-- App root -->
+  <div id="root" class="app-container" role="application" aria-label="WealthMate app"></div>
+
+  <!-- Your ES module entry. Vite / modern bundlers expect this path. -->
+  <script type="module" src="/index.tsx"></script>
+</body>
 </html>
