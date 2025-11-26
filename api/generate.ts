@@ -1,45 +1,76 @@
 // api/generate.ts
-// Vercel serverless function: forwards prompts to Gemini (server-side)
-// Add environment variables in Vercel: GEMINI_API_KEY and GEMINI_API_URL
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { GoogleAuth } from 'google-auth-library';
 
-import type { VercelRequest, VercelResponse } from '@vercel/node'
+const API_URL = process.env.GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent';
+const SERVICE_ACCOUNT_JSON = process.env.GOOGLE_SERVICE_ACCOUNT;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
-    const { prompt, model = 'gemini-3.0', maxTokens = 250 } = req.body;
-    if (!prompt) return res.status(400).json({ error: 'Missing prompt' });
+    if (!SERVICE_ACCOUNT_JSON) {
+      return res.status(500).json({ error: 'Missing GOOGLE_SERVICE_ACCOUNT environment variable' });
+    }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    const apiUrl = process.env.GEMINI_API_URL; // e.g. https://generativelanguage.googleapis.com/v1/models/gemini-3.0:generateContent
+    // Accept only POST
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-    if (!apiKey || !apiUrl) return res.status(500).json({ error: 'AI not configured' });
+    const { prompt } = req.body || {};
+    if (!prompt) return res.status(400).json({ error: 'Missing prompt in request body' });
 
-    // Generic provider payload — adapt if you need a specific schema
+    // Create GoogleAuth with credentials from the env var
+    const credentials = JSON.parse(SERVICE_ACCOUNT_JSON);
+    const auth = new GoogleAuth({
+      credentials,
+      scopes: ['https://www.googleapis.com/auth/cloud-platform']
+    });
+
+    // Get a client and access token
+    const client = await auth.getClient();
+    const accessTokenResponse = await client.getAccessToken();
+    const accessToken = (typeof accessTokenResponse === 'string') ? accessTokenResponse : accessTokenResponse?.token;
+    if (!accessToken) return res.status(500).json({ error: 'Failed to obtain access token' });
+
+    // Build the request body — adjust if you use a different model API shape
+    // (Some generative endpoints expect "input_text" or "messages"; check the model doc for exact schema.)
     const body = {
-      prompt,
-      max_tokens: maxTokens,
-      model
+      // For many current Generative Language endpoints, "content" with parts/text works.
+      // If your model expects a different schema (e.g. messages for chat), update here.
+      "content": [
+        {
+          "mimeType": "text/plain",
+          "text": prompt
+        }
+      ],
+      "temperature": 0.2,
+      "maxOutputTokens": 420
     };
 
-    const r = await fetch(apiUrl, {
+    // Call the Generative Language API with Authorization Bearer token
+    const r = await fetch(API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`
+        'Authorization': `Bearer ${accessToken}`
       },
       body: JSON.stringify(body)
     });
 
-    const json = await r.json();
+    const text = await r.text();
     if (!r.ok) {
-      console.error('AI provider error', json);
-      return res.status(r.status).json({ error: 'AI provider error', details: json });
+      console.error('Gemini provider error', r.status, text);
+      return res.status(502).json({ status: r.status, raw: text });
     }
 
-    return res.status(200).json(json);
+    // Try parse JSON
+    try {
+      const parsed = JSON.parse(text);
+      return res.status(200).json({ ok: true, modelResponse: parsed });
+    } catch {
+      return res.status(200).json({ ok: true, raw: text });
+    }
+
   } catch (err: any) {
-    console.error('generate error', err);
-    return res.status(500).json({ error: err.message || 'server error' });
+    console.error('generate.ts exception', err);
+    return res.status(500).json({ error: err?.message || String(err) });
   }
 }
