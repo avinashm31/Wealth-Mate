@@ -1,7 +1,5 @@
-
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { GoogleGenAI } from "@google/genai";
 import { read, utils } from "xlsx";
 import { 
   Shield, 
@@ -206,7 +204,6 @@ class WealthDatabase {
 // Initialize Mock DB
 WealthDatabase.init();
 
-
 // --- Styles (CSS-in-JS Helper) ---
 const styles = {
   container: {
@@ -287,6 +284,33 @@ const styles = {
     fontWeight: 500,
   }
 };
+
+// --- Tiny AI Helper: Calls serverless /api/generate ---
+async function callAiServer(prompt: string, opts: { model?: string, maxTokens?: number } = {}) {
+  try {
+    const resp = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, model: opts.model || 'gemini-3.0', maxTokens: opts.maxTokens || 400 })
+    });
+    if (!resp.ok) {
+      const txt = await resp.text();
+      console.error('AI server error', resp.status, txt);
+      return null;
+    }
+    const json = await resp.json();
+    // Attempt to extract text in a few common shapes
+    if (typeof json === 'string') return json;
+    if (json.text) return json.text;
+    if (json.output && typeof json.output === 'string') return json.output;
+    if (json.candidates && json.candidates[0] && typeof json.candidates[0].content === 'string') return json.candidates[0].content;
+    // Fallback: stringify entire payload
+    return JSON.stringify(json);
+  } catch (err) {
+    console.error('callAiServer failed', err);
+    return null;
+  }
+}
 
 // --- Custom Curved Loop Component ---
 const CurvedLoop = ({ text = "WEALTHMATE ✦ ", speed = 10, radius = 800 }) => {
@@ -709,7 +733,6 @@ const IncomeExpenseChart = ({ transactions, startDate, endDate }: { transactions
                     <polygon points={createPath('income')} fill="url(#goldGradient)" stroke={GOLD_COLOR} strokeWidth="2" strokeLinejoin="round" />
                     
                     {/* Expense Area (White line with slight shadow) */}
-                     {/* We draw expens as a line primarily, but maybe a slight area too */}
                     <polyline points={createPath('expense')} fill="none" stroke="#fff" strokeWidth="2" strokeLinejoin="round" opacity="0.9" />
                 </svg>
             </div>
@@ -1159,7 +1182,6 @@ const LandingPage = ({ onGetStarted }: { onGetStarted: () => void }) => {
   );
 };
 
-
 // --- AUTH COMPONENTS ---
 type AuthMode = 'LOGIN' | 'SIGNUP' | 'VERIFY' | 'FORGOT';
 
@@ -1444,7 +1466,6 @@ const Dashboard = ({ user, onLogout }: { user: UserProfile, onLogout: () => void
         const descriptions = Array.from(uniqueDescriptions).slice(0, 100);
         if (descriptions.length > 0) {
             try {
-                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
                 const prompt = `
                 Categorize these financial transaction descriptors into simple buckets: 
                 Buckets: Food, Transport, Utilities, Shopping, Entertainment, Health, Transfer, Housing, Salary, Investment.
@@ -1452,17 +1473,23 @@ const Dashboard = ({ user, onLogout }: { user: UserProfile, onLogout: () => void
                 Return strictly JSON: { "Starbucks": "Food", "Uber": "Transport" }
                 Descriptors: ${JSON.stringify(descriptions)}
                 `;
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: prompt,
-                    config: { responseMimeType: 'application/json' }
-                });
-                const categoryMap = JSON.parse(response.text);
-                newTxns.forEach(t => { 
-                    if (t.type === 'expense' && categoryMap[t.description]) {
-                        t.category = categoryMap[t.description];
+                const aiText = await callAiServer(prompt, { model: 'gemini-3.0', maxTokens: 800 });
+                if (aiText) {
+                  let categoryMap: Record<string,string> = {};
+                  try {
+                    categoryMap = JSON.parse(aiText);
+                  } catch (e) {
+                    const m = aiText.match(/\{[\s\S]*\}/);
+                    if (m) {
+                      try { categoryMap = JSON.parse(m[0]); } catch {}
                     }
-                });
+                  }
+                  newTxns.forEach(t => { 
+                      if (t.type === 'expense' && categoryMap[t.description]) {
+                          t.category = categoryMap[t.description];
+                      }
+                  });
+                }
             } catch (err) { console.error("AI Categorization failed", err); }
         }
 
@@ -1555,7 +1582,6 @@ const Dashboard = ({ user, onLogout }: { user: UserProfile, onLogout: () => void
         const categorySummary = chartData.map(c => `${c.label}: ₹${c.value}`).join(', ');
         
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const prompt = `
             Act as a ruthless institutional wealth advisor for a premium client.
             Client: ${currentUser.name}.
@@ -1575,8 +1601,9 @@ const Dashboard = ({ user, onLogout }: { user: UserProfile, onLogout: () => void
             
             Tone: Professional, direct, high-finance. Keep it under 60 words.
             `;
-            const response = await ai.models.generateContent({ model: 'gemini-3-pro-preview', contents: prompt });
-            setAdvice(response.text);
+            const aiText = await callAiServer(prompt, { model: 'gemini-3.0', maxTokens: 200 });
+            if (aiText) setAdvice(aiText);
+            else setAdvice("Advisory systems unavailable. Check network.");
         } catch (e) { setAdvice("Advisory systems unavailable. Check network protocols."); }
         setIsAnalyzing(false);
     };
